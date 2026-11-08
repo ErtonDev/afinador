@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b1d22">
+<title>Afinador de bolsillo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+/* Diseño: una sola pantalla. Arriba la nota grande, en medio el dial de cents,
+   abajo las seis cuerdas como si fueran las clavijas del clavijero. */
+:root {
+  --bg: #e9ebee;        /* gris níquel, como las clavijas */
+  --panel: #f6f7f9;
+  --fg: #1b1d22;
+  --muted: #5d6370;
+  --line: #c7cbd3;
+  --brass: #a8741a;     /* latón: el acento */
+  --ok: #1f8a4c;        /* afinado */
+  --warn: #b7791f;      /* cerca */
+  --bad: #c0392b;       /* lejos */
+  --display: "Bricolage Grotesque", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171b; --panel: #1e2127; --fg: #eceef2; --muted: #9aa1ad; --line: #353a44;
+    --brass: #d9a441; --ok: #3ccf7c; --warn: #e5b04a; --bad: #ef6a5b;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--fg); font: 16px/1.5 var(--body);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+main {
+  max-width: 480px; margin: 0 auto; min-height: 100%;
+  display: flex; flex-direction: column; gap: 20px;
+  padding-block: 20px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+h1 { font: 800 1.1rem/1 var(--display); letter-spacing: .02em; margin: 0; }
+.ref { display: flex; align-items: center; gap: 6px; font: 500 .85rem var(--mono); color: var(--muted); }
+.ref button {
+  width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--panel); color: var(--fg); font: 500 1rem var(--mono); cursor: pointer;
+}
+.ref output { min-width: 4.5ch; text-align: center; font-variant-numeric: tabular-nums; color: var(--fg); }
+
+.lectura { text-align: center; display: grid; gap: 4px; }
+.nota { font: 800 clamp(6rem, 34vw, 9rem)/.9 var(--display); letter-spacing: -.03em; transition: color .15s; }
+.nota sub { font-size: .32em; font-weight: 500; vertical-align: baseline; margin-left: .05em; color: var(--muted); }
+.nombre { font-size: .95rem; color: var(--muted); min-height: 1.5em; }
+.hz { font: 500 1rem var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+
+.dial { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 8px 4px; }
+.dial svg { display: block; width: 100%; height: auto; }
+.dial .tick { stroke: var(--line); stroke-width: 2; }
+.dial .tick.mayor { stroke: var(--muted); }
+.dial .zona { fill: var(--ok); opacity: .18; }
+.dial text { fill: var(--muted); font: 500 11px var(--mono); }
+#aguja { stroke: var(--brass); stroke-width: 4; stroke-linecap: round; transition: transform .08s linear; transform-origin: 160px 150px; }
+.dial .pivote { fill: var(--brass); }
+.cents { text-align: center; font: 500 .95rem var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); padding-bottom: 6px; }
+
+.cuerdas { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.cuerda {
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+  padding: 8px 2px; text-align: center; display: grid; gap: 2px; transition: border-color .15s, background .15s;
+}
+.cuerda b { font: 800 1.35rem/1 var(--display); }
+.cuerda small { font: 400 .7rem var(--mono); color: var(--muted); }
+.cuerda.activa { border-color: var(--brass); box-shadow: inset 0 0 0 1px var(--brass); }
+.cuerda.afinada { border-color: var(--ok); box-shadow: inset 0 0 0 1px var(--ok); }
+
+#empezar {
+  margin-top: auto; padding: 16px; border: 0; border-radius: 12px; cursor: pointer;
+  background: var(--fg); color: var(--bg); font: 500 1.05rem var(--body);
+}
+#empezar:focus-visible, .ref button:focus-visible { outline: 3px solid var(--brass); outline-offset: 2px; }
+.estado { text-align: center; font-size: .85rem; color: var(--muted); min-height: 1.4em; margin: 0; }
+@media (prefers-reduced-motion: reduce) { #aguja, .nota, .cuerda { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>AFINADOR</h1>
+    <!-- Frecuencia de referencia del La4. Lo normal es 440 Hz. -->
+    <div class="ref" aria-label="Referencia La4">
+      <button id="refMenos" aria-label="Bajar referencia">−</button>
+      <output id="refValor">440</output>Hz
+      <button id="refMas" aria-label="Subir referencia">+</button>
+    </div>
+  </header>
+
+  <section class="lectura" aria-live="polite">
+    <div class="nota" id="nota">–</div>
+    <div class="nombre" id="nombre">Pulsa «Empezar» y toca una cuerda</div>
+    <div class="hz" id="hz">— Hz</div>
+  </section>
+
+  <section class="dial">
+    <!-- Dial de −50 a +50 cents. La aguja gira ±60° alrededor del pivote (160,150). -->
+    <svg viewBox="0 0 320 170" aria-hidden="true">
+      <g id="marcas"></g>
+      <line id="aguja" x1="160" y1="150" x2="160" y2="38"></line>
+      <circle class="pivote" cx="160" cy="150" r="7"></circle>
+    </svg>
+    <div class="cents" id="cents">± 0 cents</div>
+  </section>
+
+  <section class="cuerdas" id="cuerdas" aria-label="Afinación estándar"></section>
+
+  <p class="estado" id="estado"></p>
+  <button id="empezar">Empezar</button>
+</main>
+
+<script>
+/* =====================================================================
+   1. DATOS MUSICALES
+   Cada nota se identifica con su número MIDI: La4 (440 Hz) = 69.
+   Subir un semitono = sumar 1. Una octava = 12 semitonos.
+   ===================================================================== */
+const NOTAS = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+const NOMBRES = ["Do", "Do♯", "Re", "Re♯", "Mi", "Fa", "Fa♯", "Sol", "Sol♯", "La", "La♯", "Si"];
+
+// Afinación estándar, de la 6.ª cuerda (la más grave) a la 1.ª.
+const CUERDAS = [
+  { num: 6, midi: 40 }, // Mi2  ≈ 82,4 Hz
+  { num: 5, midi: 45 }, // La2  = 110 Hz
+  { num: 4, midi: 50 }, // Re3  ≈ 146,8 Hz
+  { num: 3, midi: 55 }, // Sol3 = 196 Hz
+  { num: 2, midi: 59 }, // Si3  ≈ 246,9 Hz
+  { num: 1, midi: 64 }, // Mi4  ≈ 329,6 Hz
+];
+
+let refLa = 440; // Hz del La4
+
+// Frecuencia → número MIDI con decimales (69.25 = La4 un cuarto de semitono alto)
+function frecuenciaAMidi(f) { return 69 + 12 * Math.log2(f / refLa); }
+function midiAFrecuencia(m) { return refLa * Math.pow(2, (m - 69) / 12); }
+
+/* =====================================================================
+   2. DETECCIÓN DEL TONO (algoritmo YIN, simplificado)
+   La cuerda vibra de forma periódica: la onda se repite cada T muestras.
+   Buscamos ese T comparando la señal consigo misma desplazada τ muestras.
+   Cuando τ = T, la diferencia es casi cero. Frecuencia = muestrasPorSegundo / T.
+   ===================================================================== */
+// <yin>
+function detectarTono(buf, sampleRate) {
+  // a) ¿Hay sonido suficiente? Medimos el volumen (RMS). Si es muy bajo, es ruido.
+  let suma = 0;
+  for (let i = 0; i < buf.length; i++) suma += buf[i] * buf[i];
+  if (Math.sqrt(suma / buf.length) < 0.01) return -1;
+
+  // b) Solo buscamos entre 60 Hz y 1000 Hz (lo que da una guitarra).
+  const tauMin = Math.floor(sampleRate / 1000);
+  const tauMax = Math.min(Math.floor(sampleRate / 60), Math.floor(buf.length / 2));
+  const W = buf.length - tauMax; // ventana de comparación
+
+  // c) Función de diferencia: d(τ) = Σ (x[i] − x[i+τ])²
+  const d = new Float32Array(tauMax + 1);
+  for (let tau = 1; tau <= tauMax; tau++) {
+    let s = 0;
+    for (let i = 0; i < W; i++) {
+      const delta = buf[i] - buf[i + tau];
+      s += delta * delta;
+    }
+    d[tau] = s;
+  }
+
+  // d) Normalización acumulada: hace que el umbral funcione igual con
+  //    cualquier volumen y evita confundir la nota con su octava.
+  const cmnd = new Float32Array(tauMax + 1);
+  cmnd[0] = 1;
+  let acumulado = 0;
+  for (let tau = 1; tau <= tauMax; tau++) {
+    acumulado += d[tau];
+    cmnd[tau] = acumulado === 0 ? 1 : d[tau] * tau / acumulado;
+  }
+
+  // e) Primer τ que baja del umbral; luego bajamos hasta el fondo de ese valle.
+  const UMBRAL = 0.15;
+  let tau = tauMin;
+  while (tau < tauMax && cmnd[tau] >= UMBRAL) tau++;
+  if (tau >= tauMax) return -1; // no hay periodo claro
+  while (tau + 1 < tauMax && cmnd[tau + 1] < cmnd[tau]) tau++;
+
+  // f) Interpolación parabólica: el periodo real cae entre dos muestras.
+  //    Ajustamos una parábola a los tres puntos para afinar el resultado.
+  const a = cmnd[tau - 1], b = cmnd[tau], c = cmnd[tau + 1];
+  const divisor = a - 2 * b + c;
+  const ajuste = divisor !== 0 ? (a - c) / (2 * divisor) : 0;
+
+  return sampleRate / (tau + ajuste);
+}
+// </yin>
+
+/* =====================================================================
+   3. INTERFAZ
+   ===================================================================== */
+const $ = (id) => document.getElementById(id);
+
+// Dibuja las marcas del dial: una cada 10 cents, más gruesas cada 50.
+(function dibujarDial() {
+  const g = $("marcas");
+  const ns = "http://www.w3.org/2000/svg";
+  // Zona verde de ±5 cents
+  const zona = document.createElementNS(ns, "path");
+  const arco = (ang, r) => [160 + r * Math.sin(ang), 150 - r * Math.cos(ang)];
+  const a5 = (5 / 50) * (Math.PI / 3);
+  const [x1, y1] = arco(-a5, 125), [x2, y2] = arco(a5, 125);
+  const [x3, y3] = arco(a5, 95), [x4, y4] = arco(-a5, 95);
+  zona.setAttribute("d", `M${x1} ${y1} A125 125 0 0 1 ${x2} ${y2} L${x3} ${y3} A95 95 0 0 0 ${x4} ${y4}Z`);
+  zona.setAttribute("class", "zona");
+  g.appendChild(zona);
+  for (let c = -50; c <= 50; c += 10) {
+    const ang = (c / 50) * (Math.PI / 3);
+    const mayor = c % 50 === 0;
+    const [ax, ay] = arco(ang, mayor ? 102 : 110);
+    const [bx, by] = arco(ang, 122);
+    const l = document.createElementNS(ns, "line");
+    l.setAttribute("x1", ax); l.setAttribute("y1", ay);
+    l.setAttribute("x2", bx); l.setAttribute("y2", by);
+    l.setAttribute("class", mayor ? "tick mayor" : "tick");
+    g.appendChild(l);
+    if (mayor) {
+      const [tx, ty] = arco(ang, 140);
+      const t = document.createElementNS(ns, "text");
+      t.setAttribute("x", tx); t.setAttribute("y", ty + 4);
+      t.setAttribute("text-anchor", "middle");
+      t.textContent = c > 0 ? "+" + c : String(c);
+      g.appendChild(t);
+    }
+  }
+})();
+
+// Botones de las seis cuerdas
+function pintarCuerdas() {
+  $("cuerdas").innerHTML = CUERDAS.map(c => {
+    const n = NOTAS[c.midi % 12], oct = Math.floor(c.midi / 12) - 1;
+    return `<div class="cuerda" data-midi="${c.midi}">
+      <b>${n}<sub style="font-size:.55em">${oct}</sub></b>
+      <small>${c.num}.ª · ${midiAFrecuencia(c.midi).toFixed(1)}</small></div>`;
+  }).join("");
+}
+pintarCuerdas();
+
+function cambiarRef(paso) {
+  refLa = Math.min(450, Math.max(430, refLa + paso));
+  $("refValor").textContent = refLa;
+  pintarCuerdas();
+}
+$("refMenos").onclick = () => cambiarRef(-1);
+$("refMas").onclick = () => cambiarRef(+1);
+
+function colorPorCents(c) {
+  const a = Math.abs(c);
+  return a <= 5 ? "var(--ok)" : a <= 15 ? "var(--warn)" : "var(--bad)";
+}
+
+// Suavizado: la mediana de las últimas lecturas descarta saltos sueltos,
+// y la aguja se mueve con un promedio exponencial para no temblar.
+const ultimas = [];
+let centsSuave = 0;
+let silencioDesde = 0;
+
+function mostrar(frecuencia) {
+  if (frecuencia <= 0) {
+    if (performance.now() - silencioDesde > 1200) {
+      $("aguja").style.transform = "rotate(0deg)";
+      $("nota").style.color = "";
+    }
+    return;
+  }
+  silencioDesde = performance.now();
+
+  ultimas.push(frecuencia);
+  if (ultimas.length > 5) ultimas.shift();
+  const f = [...ultimas].sort((x, y) => x - y)[Math.floor(ultimas.length / 2)];
+
+  const midiExacto = frecuenciaAMidi(f);
+  const midi = Math.round(midiExacto);
+  const cents = (midiExacto - midi) * 100;
+  centsSuave = centsSuave * 0.6 + cents * 0.4;
+
+  const nota = NOTAS[midi % 12], octava = Math.floor(midi / 12) - 1;
+  $("nota").innerHTML = `${nota}<sub>${octava}</sub>`;
+  $("nota").style.color = colorPorCents(centsSuave);
+  $("nombre").textContent = Math.abs(centsSuave) <= 5 ? `${NOMBRES[midi % 12]} · afinado`
+    : centsSuave < 0 ? `${NOMBRES[midi % 12]} · sube (tensa la cuerda)`
+    : `${NOMBRES[midi % 12]} · baja (afloja la cuerda)`;
+  $("hz").textContent = f.toFixed(1) + " Hz";
+  const signo = centsSuave >= 0 ? "+" : "−";
+  $("cents").textContent = `${signo} ${Math.abs(centsSuave).toFixed(0)} cents`;
+  const grados = Math.max(-60, Math.min(60, (centsSuave / 50) * 60));
+  $("aguja").style.transform = `rotate(${grados}deg)`;
+
+  // Resalta la cuerda de la guitarra más cercana
+  let cercana = CUERDAS[0];
+  for (const c of CUERDAS) if (Math.abs(c.midi - midiExacto) < Math.abs(cercana.midi - midiExacto)) cercana = c;
+  document.querySelectorAll(".cuerda").forEach(el => {
+    const es = +el.dataset.midi === cercana.midi && Math.abs(cercana.midi - midiExacto) < 1;
+    el.classList.toggle("activa", es && Math.abs(centsSuave) > 5);
+    el.classList.toggle("afinada", es && Math.abs(centsSuave) <= 5);
+  });
+}
+
+/* =====================================================================
+   4. MICRÓFONO
+   getUserMedia pide permiso. Solo funciona en https:// o en localhost.
+   Desactivamos los filtros de voz del móvil porque deforman la señal.
+   ===================================================================== */
+let ctx, analizador, buffer, wakeLock;
+
+async function empezar() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const fuente = ctx.createMediaStreamSource(stream);
+    analizador = ctx.createAnalyser();
+    analizador.fftSize = 4096; // muestras por lectura (≈85 ms a 48 kHz)
+    fuente.connect(analizador);
+    buffer = new Float32Array(analizador.fftSize);
+
+    $("empezar").hidden = true;
+    $("estado").textContent = "Escuchando…";
+    $("nombre").textContent = "Toca una cuerda al aire";
+    mantenerPantalla();
+    bucle();
+  } catch (e) {
+    $("estado").textContent = location.protocol === "https:" || location.hostname === "localhost"
+      ? "No hay permiso para el micrófono. Actívalo en los ajustes del sitio."
+      : "El micrófono necesita https://. Sube el archivo a GitHub Pages.";
+  }
+}
+
+function bucle() {
+  analizador.getFloatTimeDomainData(buffer);
+  mostrar(detectarTono(buffer, ctx.sampleRate));
+  requestAnimationFrame(bucle);
+}
+
+// Evita que la pantalla se apague mientras afinas
+async function mantenerPantalla() {
+  try { wakeLock = await navigator.wakeLock?.request("screen"); } catch (e) {}
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && ctx) mantenerPantalla();
+});
+
+$("empezar").onclick = empezar;
+</script>
+</body>
+</html>
