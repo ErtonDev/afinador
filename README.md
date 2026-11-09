@@ -4,6 +4,8 @@ Afinador web para guitarra, sin anuncios. Funciona en el navegador del móvil y 
 
 **Úsalo aquí:** https://ertondev.github.io/afinador/
 
+![Captura de pantalla del afinador](screenshot.jpg)
+
 ## Qué hace
 
 - Detecta la nota que suena por el micrófono y muestra cuántos *cents* te desvías.
