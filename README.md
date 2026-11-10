@@ -14,6 +14,7 @@ Afinador web para guitarra, sin anuncios. Funciona en el navegador del móvil y 
 - Te dice si tienes que tensar o aflojar la cuerda.
 - Referencia del La4 ajustable entre 430 y 450 Hz (por defecto 440 Hz).
 - Mantiene la pantalla encendida mientras afinas.
+- Botón **Parar** que apaga el micrófono por completo cuando terminas.
 - Tema claro y oscuro según el ajuste del móvil.
 
 Todo está en un solo archivo, `index.html`, sin librerías ni servidor. El audio se procesa en tu propio móvil y no se envía a ningún sitio.

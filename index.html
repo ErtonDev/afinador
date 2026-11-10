@@ -84,6 +84,8 @@ h1 { font: 800 1.1rem/1 var(--display); letter-spacing: .02em; margin: 0; }
   margin-top: auto; padding: 16px; border: 0; border-radius: 12px; cursor: pointer;
   background: var(--fg); color: var(--bg); font: 500 1.05rem var(--body);
 }
+#empezar.escuchando { background: transparent; color: var(--fg); box-shadow: inset 0 0 0 2px var(--line); }
+#empezar:disabled { opacity: .6; cursor: wait; }
 #empezar:focus-visible, .ref button:focus-visible { outline: 3px solid var(--brass); outline-offset: 2px; }
 .estado { text-align: center; font-size: .85rem; color: var(--muted); min-height: 1.4em; margin: 0; }
 @media (prefers-reduced-motion: reduce) { #aguja, .nota, .cuerda { transition: none; } }
@@ -320,10 +322,13 @@ function mostrar(frecuencia) {
    Desactivamos los filtros de voz del móvil porque deforman la señal.
    ===================================================================== */
 let ctx, analizador, buffer, wakeLock;
+let stream = null;    // la conexión con el micrófono
+let idBucle = null;   // identificador del requestAnimationFrame, para poder cancelarlo
 
 async function empezar() {
+  $("empezar").disabled = true; // evita dos pulsaciones mientras se pide el permiso
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
+    stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
     });
     ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -333,22 +338,56 @@ async function empezar() {
     fuente.connect(analizador);
     buffer = new Float32Array(analizador.fftSize);
 
-    $("empezar").hidden = true;
+    $("empezar").textContent = "Parar";
+    $("empezar").classList.add("escuchando");
     $("estado").textContent = "Escuchando…";
     $("nombre").textContent = "Toca una cuerda al aire";
     mantenerPantalla();
     bucle();
   } catch (e) {
+    stream = null;
     $("estado").textContent = location.protocol === "https:" || location.hostname === "localhost"
       ? "No hay permiso para el micrófono. Actívalo en los ajustes del sitio."
       : "El micrófono necesita https://. Sube el archivo a GitHub Pages.";
+  } finally {
+    $("empezar").disabled = false;
   }
+}
+
+/* Parar: hay que soltar todo lo que se cogió al empezar.
+   - Cancelar el bucle de lectura.
+   - Detener cada pista del micrófono: es lo que hace que Android quite
+     el aviso de «micrófono en uso». Cerrar solo el AudioContext no basta.
+   - Cerrar el AudioContext y liberar el bloqueo de pantalla. */
+function parar() {
+  if (idBucle !== null) cancelAnimationFrame(idBucle);
+  idBucle = null;
+  stream?.getTracks().forEach(pista => pista.stop());
+  stream = null;
+  ctx?.close();
+  ctx = null;
+  wakeLock?.release().catch(() => {});
+  wakeLock = null;
+
+  // Deja la pantalla como al principio
+  ultimas.length = 0;
+  centsSuave = 0;
+  $("nota").textContent = "–";
+  $("nota").style.color = "";
+  $("nombre").textContent = "Pulsa «Empezar» y toca una cuerda";
+  $("hz").textContent = "— Hz";
+  $("cents").textContent = "± 0 cents";
+  $("aguja").style.transform = "rotate(0deg)";
+  document.querySelectorAll(".cuerda").forEach(el => el.classList.remove("activa", "afinada"));
+  $("estado").textContent = "";
+  $("empezar").textContent = "Empezar";
+  $("empezar").classList.remove("escuchando");
 }
 
 function bucle() {
   analizador.getFloatTimeDomainData(buffer);
   mostrar(detectarTono(buffer, ctx.sampleRate));
-  requestAnimationFrame(bucle);
+  idBucle = requestAnimationFrame(bucle);
 }
 
 // Evita que la pantalla se apague mientras afinas
@@ -359,7 +398,8 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && ctx) mantenerPantalla();
 });
 
-$("empezar").onclick = empezar;
+// Un solo botón que alterna entre empezar y parar
+$("empezar").onclick = () => (stream ? parar() : empezar());
 </script>
 </body>
 </html>
